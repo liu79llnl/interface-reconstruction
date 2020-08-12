@@ -86,6 +86,23 @@ def lineIntersect2(l1, l2, p1, p2):
     except:
         print("Error: {}, {}, {}, {}".format(l1, l2, p1, p2))
 
+#Points on boundary are not in poly
+def pointInPoly(p, poly):
+    windNumber = 0
+    for i in range(len(poly)):
+        vcur = poly[i]
+        vnext = poly[(i+1) % len(poly)]
+        #upward crossing
+        if vcur[1] <= p[1] and vnext[1] > p[1] and (vnext[0]-vcur[0])*(p[1]-vcur[1]) - (vnext[1]-vcur[1])*(p[0]-vcur[0]) > 0:
+            windNumber += 1
+        #downward crossing
+        elif vcur[1] > p[1] and vnext[1] <= p[1] and (vnext[0]-vcur[0])*(p[1]-vcur[1]) - (vnext[1]-vcur[1])*(p[0]-vcur[0]) < 0:
+            windNumber -= 1
+    
+    if windNumber == 0:
+        return False
+    return True
+
 def getPolyIntersectArea(poly1, poly2):
     testedintersects = [[False] * len(poly2) for _ in range(len(poly1))]
     intersections = []
@@ -172,7 +189,17 @@ def getPolyIntersectArea(poly1, poly2):
             else:
                 testedintersects[index1][index2] = True
 
-    return intersections
+    if len(intersections) > 0:
+        return intersections
+    else:
+        poly1inpoly2 = pointInPoly(poly1[0], poly2)
+        poly2inpoly1 = pointInPoly(poly2[0], poly1)
+        if poly1inpoly2 and not(poly2inpoly1):
+            return [poly1]
+        elif poly2inpoly1 and not(poly1inpoly2):
+            return [poly2]
+        else:
+            return []
 
 #Used to merge mesh elements
 def mergePolys(poly1, poly2):

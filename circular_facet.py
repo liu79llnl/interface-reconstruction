@@ -43,7 +43,7 @@ def getCircleIntersectArea(center, radius, poly):
         else:
             return 0, []
     area += getArea(apoly)
-    assert len(intersects) % 2 == 0, print("getCircleIntersectArea({}, {}, {})".format(center, radius, poly))
+    assert len(intersects) % 2 == 0
     for i in range(startAt, len(intersects)+startAt, 2):
         area += getArcArea(getDistance(intersects[i], intersects[(i+1) % len(intersects)]), radius)
     return area, intersects
@@ -102,8 +102,8 @@ def getArcFacet(poly1, poly2, poly3, a1, a2, a3, epsilon):
     cura2 = float("inf")
     cura3 = float("inf")
     #higher t1, t3 = lower cura1, cura3 respectively
-    t1 = 0
-    t3 = 0
+    t1 = 0.5
+    t3 = 0.5
     converged = False
     r1 = r1down*t1 + r1up*(1-t1)
     r3 = r3down*t3 + r3up*(1-t3)

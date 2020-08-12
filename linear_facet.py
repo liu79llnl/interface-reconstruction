@@ -58,7 +58,6 @@ def getLinearFacet(poly1, poly2, a1, a2, epsilon):
             det = da1dl1*da2dl2-da2dl1*da1dl2
             
             if det == 0:
-                print("Degenerate Jacobian")
                 
                 prevl1 = l1.copy()
                 prevl2 = l2.copy()
