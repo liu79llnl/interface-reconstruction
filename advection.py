@@ -1,14 +1,16 @@
 import numpy as np
 import math
 import vtk
+import os
 import matplotlib.pyplot as plt
 from matplotlib.patches import Polygon
 from matplotlib.collections import PatchCollection
 
-from geoms import getArea, mergePolys, getPolyIntersectArea, getPolyLineArea, getPolyLineIntersects, lineIntersect
+from geoms import getDistance, getArea, mergePolys, getPolyIntersectArea, getPolyLineArea, getPolyLineIntersects, lineIntersect
 from linear_facet import getLinearFacet
-from circular_facet import getCircleIntersectArea, getArcFacet
+from circular_facet import getCircleIntersectArea, getArcFacet, getArcFacetNewton
 from mesh import makeCartesianGrid, makeQuadGrid, makeConcaveGrid
+from vtkplots import plotQuadGrid, plotFacets
 
 #opolys = grid of quads
 #areas = grid of area fractions per quad
@@ -108,9 +110,10 @@ def merge(opolys, areas):
 #predmergedpolys, mergedpolys, mergedcoords, mergedareafractions: from merging function
 #opolys, areas: original volume fractions, used to refine linear facets
 #threshold: tolerance for errors in volume fractions
-def makeFacets(predmergedpolys, mergedpolys, mergedcoords, mergedareafractions, opolys, areas, threshold):
+def makeFacets(predmergedpolys, mergedpolys, mergedcoords, mergedareafractions, opolys, areas, threshold, makeGapless):
     #facets
     predfacets = [[None] * len(predmergedpolys) for _ in range(len(predmergedpolys))]
+    facetsunique = []
 
     #orientations
     predorientations = [[None] * len(predmergedpolys) for _ in range(len(predmergedpolys))]
@@ -169,16 +172,14 @@ def makeFacets(predmergedpolys, mergedpolys, mergedcoords, mergedareafractions, 
                     grid1 = path[pathelement-1]
                     grid2 = path[pathelement]
                     grid3 = path[pathelement+1]
+                    prevpolygon = mergedcoords[grid1]
+                    nextpolygon = mergedcoords[grid3]
                     try:
                         if mergedorientations[grid2]:
-                            prevpolygon = mergedcoords[grid1]
                             prevpolygonarea = mergedareafractions[grid1]*getArea(mergedcoords[grid1])
-                            nextpolygon = mergedcoords[grid3]
                             nextpolygonarea = mergedareafractions[grid3]*getArea(mergedcoords[grid3])
                         else:
-                            prevpolygon = mergedcoords[grid1]
                             prevpolygonarea = (1-mergedareafractions[grid1])*getArea(mergedcoords[grid1])
-                            nextpolygon = mergedcoords[grid3]
                             nextpolygonarea = (1-mergedareafractions[grid3])*getArea(mergedcoords[grid3])
                         facetline1, facetline2 = getLinearFacet(prevpolygon, nextpolygon, prevpolygonarea, nextpolygonarea, threshold)
                         if abs(mergedareafractions[grid2] - getPolyLineArea(mergedcoords[grid2], facetline1, facetline2)/getArea(mergedcoords[grid2])) > threshold:
@@ -190,23 +191,18 @@ def makeFacets(predmergedpolys, mergedpolys, mergedcoords, mergedareafractions, 
                                 assert mergedpolys[grid2][1][1] in mergedpolys[grid1][0]
                                 prevneighbor = mergedpolys[grid2][1][1]
                                 nextneighbor = mergedpolys[grid2][1][0]
-                                
+                            prevpolygon = opolys[prevneighbor[0]][prevneighbor[1]]
+                            nextpolygon = opolys[nextneighbor[0]][nextneighbor[1]]
                             if mergedorientations[grid2]:
-                                prevpolygon = opolys[prevneighbor[0]][prevneighbor[1]]
                                 prevpolygonarea = areas[prevneighbor[0]][prevneighbor[1]]*getArea(opolys[prevneighbor[0]][prevneighbor[1]])
-                                nextpolygon = opolys[nextneighbor[0]][nextneighbor[1]]
                                 nextpolygonarea = areas[nextneighbor[0]][nextneighbor[1]]*getArea(opolys[nextneighbor[0]][nextneighbor[1]])
                             else:
-                                prevpolygon = opolys[prevneighbor[0]][prevneighbor[1]]
                                 prevpolygonarea = (1-areas[prevneighbor[0]][prevneighbor[1]])*getArea(opolys[prevneighbor[0]][prevneighbor[1]])
-                                nextpolygon = opolys[nextneighbor[0]][nextneighbor[1]]
                                 nextpolygonarea = (1-areas[nextneighbor[0]][nextneighbor[1]])*getArea(opolys[nextneighbor[0]][nextneighbor[1]])
                             facetline1, facetline2 = getLinearFacet(prevpolygon, nextpolygon, prevpolygonarea, nextpolygonarea, threshold)
                         if abs(mergedareafractions[grid2] - getPolyLineArea(mergedcoords[grid2], facetline1, facetline2)/getArea(mergedcoords[grid2])) < threshold*10:
                             intersects = getPolyLineIntersects(mergedcoords[grid2], facetline1, facetline2)
-                            for linearfacetsquares in mergedpolys[grid2][0]:
-                                predfacets[linearfacetsquares[0]][linearfacetsquares[1]] = ['linear', intersects]
-                            facetfitted[pathelement-1] = intersects
+                            facetfitted[pathelement-1] = ['linear', intersects]
                         else:
                             continue
                     except:
@@ -221,12 +217,12 @@ def makeFacets(predmergedpolys, mergedpolys, mergedcoords, mergedareafractions, 
                     if facetfitted[(pathelement) % len(facetfitted)] is None:
                         lefts[(pathelement) % len(facetfitted)] = curlinearfacet
                     else:
-                        curlinearfacet = facetfitted[(pathelement) % len(facetfitted)]
+                        curlinearfacet = facetfitted[(pathelement) % len(facetfitted)][1]
                 for pathelement in range(1, 2*len(facetfitted)-1):
                     if facetfitted[(len(facetfitted)-1-pathelement) % len(facetfitted)] is None:
                         rights[(len(facetfitted)-1-pathelement) % len(facetfitted)] = curlinearfacet
                     else:
-                        curlinearfacet = facetfitted[(len(facetfitted)-1-pathelement) % len(facetfitted)]
+                        curlinearfacet = facetfitted[(len(facetfitted)-1-pathelement) % len(facetfitted)][1]
                         
                 #Try to make corners
                 #here pathelement is 1 less than pathelement from linear facet fitting
@@ -236,7 +232,7 @@ def makeFacets(predmergedpolys, mergedpolys, mergedcoords, mergedareafractions, 
                         nextFacet = rights[pathelement]
                         corner = lineIntersect(prevFacet[0], prevFacet[1], nextFacet[0], nextFacet[1])
                         corner = [prevFacet[0], corner, nextFacet[1]]
-                            #Convex vertex
+                        #Convex vertex
                         if getArea(corner) > 0:
                             cornerintersect = getPolyIntersectArea(mergedcoords[path[pathelement+1]], corner)
                             cornerareafraction = getPolyLineArea(mergedcoords[path[pathelement+1]], prevFacet[0], nextFacet[1])
@@ -257,10 +253,7 @@ def makeFacets(predmergedpolys, mergedpolys, mergedcoords, mergedareafractions, 
                             cornerareafraction = 1-cornerareafraction
                         #Make corner if close enough
                         if abs(cornerareafraction - mergedareafractions[path[pathelement+1]]) < threshold*1e2:
-                            #print("Corner facet: {}".format(path[pathelement+1]))
-                            for cornerfacetsquares in mergedpolys[path[pathelement+1]][0]:
-                                predfacets[cornerfacetsquares[0]][cornerfacetsquares[1]] = ['corner', corner]
-                            facetfitted[pathelement] = corner
+                            facetfitted[pathelement] = ['corner', corner]
                         else:
                             continue
                                 
@@ -271,27 +264,88 @@ def makeFacets(predmergedpolys, mergedpolys, mergedcoords, mergedareafractions, 
                         grid1 = path[pathelement-1]
                         grid2 = path[pathelement]
                         grid3 = path[pathelement+1]
+                        prevpolygon = mergedcoords[grid1]
+                        nextpolygon = mergedcoords[grid3]
                         try:
                             if mergedorientations[grid2]:
-                                prevpolygon = mergedcoords[grid1]
                                 prevpolygonarea = mergedareafractions[grid1]
                                 curpolygonarea = mergedareafractions[grid2]
-                                nextpolygon = mergedcoords[grid3]
                                 nextpolygonarea = mergedareafractions[grid3]
                             else:
-                                prevpolygon = mergedcoords[grid1]
                                 prevpolygonarea = 1-mergedareafractions[grid1]
                                 curpolygonarea = 1-mergedareafractions[grid2]
-                                nextpolygon = mergedcoords[grid3]
                                 nextpolygonarea = 1-mergedareafractions[grid3]
                             arccenter, arcradius, arcintersects = getArcFacet(prevpolygon, mergedcoords[grid2], nextpolygon, prevpolygonarea, curpolygonarea, nextpolygonarea, threshold)
-                            for arcfacetsquares in mergedpolys[grid2][0]:
-                                predfacets[arcfacetsquares[0]][arcfacetsquares[1]] = ['arc', arccenter, arcradius, arcintersects]
-                            facetfitted[pathelement-1] = [arccenter, arcradius, arcintersects]
+                            facetfitted[pathelement-1] = ['arc', arccenter, arcradius, arcintersects]
                         except:
                             continue
 
-    return predfacets, predorientations
+                #Retry failed circle facets with circle facet adjacent guess
+                for i in range(len(facetfitted)):
+                    if facetfitted[i] is None:
+                        grid1 = path[i]
+                        grid2 = path[i+1]
+                        grid3 = path[i+2]
+                        prevpolygon = mergedcoords[grid1]
+                        curpolygon = mergedcoords[grid2]
+                        nextpolygon = mergedcoords[grid3]
+                        if mergedorientations[grid2]:
+                            prevpolygonarea = mergedareafractions[grid1]
+                            curpolygonarea = mergedareafractions[grid2]
+                            nextpolygonarea = mergedareafractions[grid3]
+                        else:
+                            prevpolygonarea = 1-mergedareafractions[grid1]
+                            curpolygonarea = 1-mergedareafractions[grid2]
+                            nextpolygonarea = 1-mergedareafractions[grid3]
+                        if facetfitted[(i-1) % len(facetfitted)] is not None and facetfitted[(i-1) % len(facetfitted)][0] == 'arc':
+                            gcenterx = facetfitted[(i-1) % len(facetfitted)][1][0]
+                            gcentery = facetfitted[(i-1) % len(facetfitted)][1][1]
+                            gradius = facetfitted[(i-1) % len(facetfitted)][2]
+                        elif facetfitted[(i+1) % len(facetfitted)] is not None and facetfitted[(i+1) % len(facetfitted)][0] == 'arc':
+                            gcenterx = facetfitted[(i+1) % len(facetfitted)][1][0]
+                            gcentery = facetfitted[(i+1) % len(facetfitted)][1][1]
+                            gradius = facetfitted[(i+1) % len(facetfitted)][2]
+                        try:
+                            arccenter, arcradius, arcintersects = getArcFacetNewton(prevpolygon, curpolygon, nextpolygon, prevpolygonarea, curpolygonarea, nextpolygonarea, threshold, gcenterx, gcentery, gradius)
+                            facetfitted[i] = ['arc', arccenter, arcradius, arcintersects]
+                        except:
+                            #Circle facet algorithm with Newton's method failed
+                            pass
+
+                #Make facets gapless
+                if makeGapless:
+                    for i in range(len(facetfitted)):
+                        if facetfitted[i] is not None and facetfitted[i][0] is not 'corner' and facetfitted[(i+1) % len(facetfitted)] is not None:
+                            #average rightmost intersect of current facet and leftmost intersect of previous facet
+                            newIntersect = [(facetfitted[i][-1][-1][0]+facetfitted[(i+1) % len(facetfitted)][-1][0][0])/2, (facetfitted[i][-1][-1][1]+facetfitted[(i+1) % len(facetfitted)][-1][0][1])/2]
+                            facetfitted[i][-1][-1] = newIntersect
+                            facetfitted[(i+1)% len(facetfitted)][-1][0] = newIntersect
+                    for i in range(len(facetfitted)):
+                        #update circular facet center if needed
+                        if facetfitted[i] is not None and facetfitted[i][0] == 'arc':
+                            intersectleft = facetfitted[i][3][0]
+                            intersectright = facetfitted[i][3][-1]
+                            assert getDistance(intersectleft, intersectright) < 2*facetfitted[i][2]
+                            #compute new center
+                            normal = [math.sqrt(facetfitted[i][2]**2 - getDistance(intersectleft, intersectright)**2/4)/getDistance(intersectleft, intersectright)*(intersectleft[1]-intersectright[1]), math.sqrt(facetfitted[i][2]**2 - getDistance(intersectleft, intersectright)**2/4)/getDistance(intersectleft, intersectright)*(intersectright[0]-intersectleft[0])]
+                            facetcenter1 = [(intersectleft[0]+intersectright[0])/2 - normal[0], (intersectleft[1]+intersectright[1])/2 - normal[1]]
+                            facetcenter2 = [(intersectleft[0]+intersectright[0])/2 + normal[0], (intersectleft[1]+intersectright[1])/2 + normal[1]]
+                            if getDistance(facetfitted[i][1], facetcenter1) < getDistance(facetfitted[i][1], facetcenter2):
+                                facetfitted[i][1] = facetcenter1
+                            else:
+                                facetfitted[i][1] = facetcenter2
+                
+                #Store facet info for each grid square (from merged squares)
+                for i in range(len(facetfitted)):
+                    for facetsquares in mergedpolys[path[i+1]][0]:
+                        predfacets[facetsquares[0]][facetsquares[1]] = facetfitted[i]
+
+                #Get unique facets
+                for facet in facetfitted:
+                    if facet not in facetsunique:
+                        facetsunique.append(facet)
+
+    return predfacets, predorientations, facetsunique
 
 def advectFacets(opolys, areas, predfacets, predorientations, velocity, threshold):
     #areas after new timestep
@@ -397,7 +451,7 @@ def advectFacets(opolys, areas, predfacets, predorientations, velocity, threshol
 
     return nareas
 
-def advection(gridSize, timesteps):
+def advection(gridSize, timesteps, plotVtk, plotMat, makeGapless):
     
     #starting mesh
     wiggle = 0.50
@@ -412,13 +466,6 @@ def advection(gridSize, timesteps):
     
     #variables per time step
     opolys = [[0] * (len(opoints)-1) for _ in range(len(opoints)-1)]
-                
-    #vtk
-    opointindices = [[-1] * (len(opolys)+1) for _ in range(len(opolys)+1)]
-    oindexcounter = 0
-    ovtkpoints = vtk.vtkPoints()
-    ougrid = vtk.vtkUnstructuredGrid()
-    ougrid.Allocate((len(opolys)+1)**2)
 
     #matplotlib
     opatches = []
@@ -432,13 +479,6 @@ def advection(gridSize, timesteps):
     for x in range(len(opoints)-1):
         for y in range(len(opoints)-1):
             opoly = [opoints[x][y], opoints[x+1][y], opoints[x+1][y+1], opoints[x][y+1]]
-            neighbors = [[0, 0], [1, 0], [1, 1], [0, 1]]
-            for neighbor in neighbors:
-                if opointindices[x+neighbor[0]][y+neighbor[1]] == -1:
-                    opointindices[x+neighbor[0]][y+neighbor[1]] = oindexcounter
-                    ovtkpoints.InsertPoint(oindexcounter, [opoints[x+neighbor[0]][y+neighbor[1]][0], opoints[x+neighbor[0]][y+neighbor[1]][1], 0])
-                    oindexcounter += 1
-            ougrid.InsertNextCell(vtk.VTK_QUAD, 4, [opointindices[x][y], opointindices[x+1][y], opointindices[x+1][y+1], opointindices[x][y+1]])
             
             #Initial area setting
             #"""
@@ -472,34 +512,38 @@ def advection(gridSize, timesteps):
             opatchareapartials.append(math.ceil(areas[x][y] - math.floor(areas[x][y])))
                 
     #plot in matplotlib
-    op = PatchCollection(opatches, cmap='jet')
-    opatchareas = np.array(opatchareas)
-    op.set_array(opatchareas)
-    fig, ax = plt.subplots()
-    ax.set_xlim(-1, len(opolys)+1)
-    ax.set_ylim(-1, len(opolys)+1)
-    ax.add_collection(op)
-    plt.savefig("advection_original.png", dpi=199)
-    plt.clf()
-    
-    op = PatchCollection(opatches, cmap='jet')
-    opatchareas = np.array(opatchareapartials)
-    op.set_array(opatchareas)
-    fig, ax = plt.subplots()
-    ax.set_xlim(-1, len(opolys)+1)
-    ax.set_ylim(-1, len(opolys)+1)
-    ax.add_collection(op)
-    plt.savefig("advection_original_partials.png", dpi=199)
-    plt.clf()
+    if plotMat:
+        try:
+            os.mkdir('advection_plots')
+        except:
+            print("Saving plots in ./advection_plots/.")
+        op = PatchCollection(opatches, cmap='jet')
+        opatchareas = np.array(opatchareas)
+        op.set_array(opatchareas)
+        fig, ax = plt.subplots()
+        ax.set_xlim(-1, len(opolys)+1)
+        ax.set_ylim(-1, len(opolys)+1)
+        ax.add_collection(op)
+        plt.savefig("advection_plots/original.png", dpi=199)
+        plt.clf()
+        
+        op = PatchCollection(opatches, cmap='jet')
+        opatchareas = np.array(opatchareapartials)
+        op.set_array(opatchareas)
+        fig, ax = plt.subplots()
+        ax.set_xlim(-1, len(opolys)+1)
+        ax.set_ylim(-1, len(opolys)+1)
+        ax.add_collection(op)
+        plt.savefig("advection_plots/original_partials.png", dpi=199)
+        plt.clf()
     
     #plot in vtk
-    plotpolys = []
-    for x in range(len(opolys)):
-        for y in range(len(opolys)):
-            plotpolys.append(opolys[x][y])
-    
-    #for histogram
-    prederrors = []
+    if plotVtk:
+        try:
+            os.mkdir('advection_vtk')
+        except:
+            print("Saving vtk files in ./advection_vtk/.")
+        plotQuadGrid(opoints, 'advection_vtk/quads')
     
     #main advection loop
     for timestep in range(timesteps):
@@ -507,47 +551,50 @@ def advection(gridSize, timesteps):
         
         predmergedpolys, mergedpolys, mergedcoords, mergedareafractions = merge(opolys, areas)
                 
-        predfacets, predorientations = makeFacets(predmergedpolys, mergedpolys, mergedcoords, mergedareafractions, opolys, areas, threshold)
+        predfacets, predorientations, facetsunique = makeFacets(predmergedpolys, mergedpolys, mergedcoords, mergedareafractions, opolys, areas, threshold, makeGapless)
 
         #Plot facets in vtk
+        if plotVtk:
+            plotFacets(facetsunique, 'advection_vtk/timestep_{}'.format(timestep))
         
         print("Computing new areas")
         nareas = advectFacets(opolys, areas, predfacets, predorientations, velocity, threshold)
         areas = nareas
 
-        print("Plotting")
-        #plot in matplotlib
-        newp = PatchCollection(opatches, cmap='jet')
-        npatchareas = []
-        for x in range(len(opolys)):
-            for y in range(len(opolys)):
-                npatchareas.append(areas[x][y])
-        npatchareas = np.array(npatchareas)
-        newp.set_array(npatchareas)
-        fig, ax = plt.subplots()
-        ax.set_xlim(-1, len(opolys)+1)
-        ax.set_ylim(-1, len(opolys)+1)
-        ax.add_collection(newp)
-        plt.savefig("advection_pred_timestep_{}.png".format(timestep), dpi=199)
-        plt.clf()
+        if plotMat:
+            print("Plotting")
+            #plot in matplotlib
+            newp = PatchCollection(opatches, cmap='jet')
+            npatchareas = []
+            for x in range(len(opolys)):
+                for y in range(len(opolys)):
+                    npatchareas.append(areas[x][y])
+            npatchareas = np.array(npatchareas)
+            newp.set_array(npatchareas)
+            fig, ax = plt.subplots()
+            ax.set_xlim(-1, len(opolys)+1)
+            ax.set_ylim(-1, len(opolys)+1)
+            ax.add_collection(newp)
+            plt.savefig("advection_plots/pred_timestep_{}.png".format(timestep), dpi=199)
+            plt.clf()
 
-        newp = PatchCollection(opatches, cmap='jet')
-        npatchareas = []
-        for x in range(len(opolys)):
-            for y in range(len(opolys)):
-                npatchareas.append(math.ceil(areas[x][y] - math.floor(areas[x][y])))
-        npatchareas = np.array(npatchareas)
-        newp.set_array(npatchareas)
-        fig, ax = plt.subplots()
-        ax.set_xlim(-1, len(opolys)+1)
-        ax.set_ylim(-1, len(opolys)+1)
-        ax.add_collection(newp)
-        plt.savefig("advection_predpartials_timestep_{}.png".format(timestep), dpi=199)
-        plt.clf()
-        
-        plt.close("all")
+            newp = PatchCollection(opatches, cmap='jet')
+            npatchareas = []
+            for x in range(len(opolys)):
+                for y in range(len(opolys)):
+                    npatchareas.append(math.ceil(areas[x][y] - math.floor(areas[x][y])))
+            npatchareas = np.array(npatchareas)
+            newp.set_array(npatchareas)
+            fig, ax = plt.subplots()
+            ax.set_xlim(-1, len(opolys)+1)
+            ax.set_ylim(-1, len(opolys)+1)
+            ax.add_collection(newp)
+            plt.savefig("advection_plots/predpartials_timestep_{}.png".format(timestep), dpi=199)
+            plt.clf()
+
+            plt.close("all")
 
 np.random.seed(17)
 gridSize = 50
-timesteps = 10
-advection(gridSize, timesteps)
+timesteps = 50
+advection(gridSize, timesteps, plotVtk=False, plotMat=True, makeGapless=True)

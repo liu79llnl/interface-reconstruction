@@ -1,4 +1,5 @@
 import vtk
+import os
 
 #Draw polygon grid
 def plotPolyGrid(polys, savename):
@@ -81,3 +82,44 @@ def plotQuadGrid(points, savename):
     writer.SetFileName("{}_grid.vtp".format(savename))
     writer.SetInputData(ugrid)
     writer.Write()
+
+#Draw facets, input in format of makeFacets
+#Linear facet: ['linear', intersects]
+#Corner facet: ['corner', intersects]
+#Arc facet: ['arc', arccenter, arcradius, arcintersects]
+def plotFacets(facets, savename):
+    try:
+        os.mkdir(savename)
+    except:
+        pass
+
+    g = open("{}_all.visit".format(savename), "w")
+    facetnum = 0
+    for facet in facets:
+        if facet[0] == 'linear' or facet[0] == 'corner':
+            for i in range(len(facet)-1):
+                p1 = facet[1][i]
+                p2 = facet[1][i+1]
+                line = vtk.vtkLineSource()
+                line.SetPoint1(p1[0], p1[1], 0)
+                line.SetPoint2(p2[0], p2[1], 0)
+                writer = vtk.vtkXMLPolyDataWriter()
+                writer.SetFileName("{}/facet_{}.vtp".format(savename, facetnum))
+                writer.SetInputConnection(line.GetOutputPort())
+                writer.Write()
+        elif facet[0] == 'arc':
+            arc = vtk.vtkArcSource()
+            arc.SetPoint1(facet[3][0][0], facet[3][0][1], 0)
+            arc.SetPoint2(facet[3][-1][0], facet[3][-1][1], 0)
+            arc.SetCenter(facet[1][0], facet[1][1], 0)
+            arc.SetResolution(8)
+            writer = vtk.vtkXMLPolyDataWriter()
+            writer.SetFileName("{}/facet_{}.vtp".format(savename, facetnum))
+            writer.SetInputConnection(arc.GetOutputPort())
+            writer.Write()
+        facetnum += 1
+
+    g.write("!NBLOCKS {}\n".format(facetnum))
+    for i in range(facetnum):
+        g.write("{}/facet_{}.vtp\n".format(savename, i))
+    g.close()
