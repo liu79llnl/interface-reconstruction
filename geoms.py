@@ -4,13 +4,13 @@ import math
 #Basic geometric methods
 
 #Implementation of shoelace formula
-def getArea(points):
-    if len(points) < 3:
+def getArea(poly):
+    if len(poly) < 3:
         return 0
     sum = 0
-    for i in range(len(points)-1):
-        sum += points[i+1][1]*points[i][0] - points[i+1][0]*points[i][1]
-    sum += points[0][1]*points[-1][0] - points[0][0]*points[-1][1]
+    for i in range(len(poly)-1):
+        sum += poly[i+1][1]*poly[i][0] - poly[i+1][0]*poly[i][1]
+    sum += poly[0][1]*poly[-1][0] - poly[0][0]*poly[-1][1]
     return sum/2
 
 #Get Euclidean distance
@@ -33,16 +33,26 @@ def getCentroid(poly):
     centroid[1] /= area
     return centroid
 
+#Linear interpolation: if alpha = 0, returns p1; if alpha = 1, returns p2
+def lerp(p1, p2, alpha):
+    return [p1[0]*(1-alpha)+p2[0]*alpha, p1[1]*(1-alpha)+p2[1]*alpha]
+
 #Returns intersection of segments l1 to l2, p1 to p2, if such an intersection exists
+#Returns: intersect, tl, tp
 def lineIntersect(l1, l2, p1, p2):
     #two lines intersect once
-    if (p2[0]-p1[0])*(l2[1]-l1[1]) - (p2[1]-p1[1])*(l2[0]-l1[0]) != 0:
-        tp = ((p1[1]-l1[1])*(l2[0]-l1[0]) - (p1[0]-l1[0])*(l2[1]-l1[1]))/((p2[0]-p1[0])*(l2[1]-l1[1]) - (p2[1]-p1[1])*(l2[0]-l1[0]))
-        tl = (tp*(p2[0]-p1[0]) + p1[0]-l1[0])/(l2[0]-l1[0])
-        return [p1[0] + tp*(p2[0]-p1[0]), p1[1] + tp*(p2[1]-p1[1])]
-    #Two lines are parallel: no intersects or infinite intersects
-    else:
-        return []
+    try:
+        if (p2[0]-p1[0])*(l2[1]-l1[1]) - (p2[1]-p1[1])*(l2[0]-l1[0]) != 0:
+            #Not parallel: there is an intersect
+            tp = ((p1[1]-l1[1])*(l2[0]-l1[0]) - (p1[0]-l1[0])*(l2[1]-l1[1]))/((p2[0]-p1[0])*(l2[1]-l1[1]) - (p2[1]-p1[1])*(l2[0]-l1[0]))
+            tl = ((l1[1]-p1[1])*(p2[0]-p1[0]) - (l1[0]-p1[0])*(p2[1]-p1[1]))/((l2[0]-l1[0])*(p2[1]-p1[1]) - (l2[1]-l1[1])*(p2[0]-p1[0]))
+            return lerp(p1, p2, tp), tl, tp
+        else:
+            #Parallel: call it no intersects
+            return None, None, None
+            
+    except:
+        print("Error: {}, {}, {}, {}".format(l1, l2, p1, p2))
 
 #Get intersects of line l1 to l2 with convex polygon
 def getPolyLineIntersects(poly, l1, l2):
@@ -70,21 +80,32 @@ def getPolyLineIntersects(poly, l1, l2):
                 distances.append((l2[0]-l1[0])*(pinter[0]-l1[0]) + (l2[1]-l1[1])*(pinter[1]-l1[1]))
     return [x for _,x in sorted(zip(distances, intersects))]
 
-#Returns intersection of segments l1 to l2, p1 to p2, if such an intersection exists
-def lineIntersect2(l1, l2, p1, p2):
-    #two lines intersect once
-    try:
-        if (p2[0]-p1[0])*(l2[1]-l1[1]) - (p2[1]-p1[1])*(l2[0]-l1[0]) != 0:
-            #Not parallel: there is an intersect
-            tp = ((p1[1]-l1[1])*(l2[0]-l1[0]) - (p1[0]-l1[0])*(l2[1]-l1[1]))/((p2[0]-p1[0])*(l2[1]-l1[1]) - (p2[1]-p1[1])*(l2[0]-l1[0]))
-            tl = ((l1[1]-p1[1])*(p2[0]-p1[0]) - (l1[0]-p1[0])*(p2[1]-p1[1]))/((l2[0]-l1[0])*(p2[1]-p1[1]) - (l2[1]-l1[1])*(p2[0]-p1[0]))
-            return [p1[0] + tp*(p2[0]-p1[0]), p1[1] + tp*(p2[1]-p1[1])], tl, tp
-        else:
-            #Parallel: call it no intersects
-            return None, None, None
-            
-    except:
-        print("Error: {}, {}, {}, {}".format(l1, l2, p1, p2))
+#Get area to left of line within polygon
+def getPolyLineArea(poly, l1, l2):
+    assert not (l1[0] == l2[0] and l1[1] == l2[1])
+    intersectRegion = []
+    if l1[0] == l2[0]:
+        for i in range(len(poly)):
+            p1 = poly[i]
+            p2 = poly[(i+1) % len(poly)]
+            if (p1[0] <= l1[0] and l1[1] < l2[1]) or (p1[0] >= l1[0] and l1[1] > l2[1]):
+                intersectRegion.append(p1)
+            if (p1[0] < l1[0] and p2[0] > l1[0]) or (p1[0] > l1[0] and p2[0] < l1[0]):
+                t = (l1[0] - p1[0])/(p2[0]-p1[0])
+                pinter = [p1[0] + (p2[0]-p1[0])*t, p1[1] + (p2[1]-p1[1])*t]
+                intersectRegion.append(pinter)
+    else:
+        l = lambda x : l1[1] + (l2[1]-l1[1])*(x-l1[0])/(l2[0]-l1[0])
+        for i in range(len(poly)):
+            p1 = poly[i]
+            p2 = poly[(i+1) % len(poly)]
+            if (p1[1] >= l(p1[0]) and l1[0] < l2[0]) or (p1[1] <= l(p1[0]) and l1[0] > l2[0]):
+                intersectRegion.append(p1)
+            if (p1[1] > l(p1[0]) and p2[1] < l(p2[0])) or (p1[1] < l(p1[0]) and p2[1] > l(p2[0])):
+                t = (p1[1]-l1[1]-(l2[1]-l1[1])*(p1[0]-l1[0])/(l2[0]-l1[0]))/((l2[1]-l1[1])*(p2[0]-p1[0])/(l2[0]-l1[0]) - (p2[1]-p1[1]))
+                pinter = [p1[0] + (p2[0]-p1[0])*t, p1[1] + (p2[1]-p1[1])*t]
+                intersectRegion.append(pinter)
+    return getArea(intersectRegion)
 
 #Points on boundary are not in poly
 def pointInPoly(p, poly):
@@ -103,6 +124,7 @@ def pointInPoly(p, poly):
         return False
     return True
 
+#TODO: algorithm can be improved from O(n^2) to O(n log n) finding intersection points of pairs of edges
 def getPolyIntersectArea(poly1, poly2):
     testedintersects = [[False] * len(poly2) for _ in range(len(poly1))]
     intersections = []
@@ -118,7 +140,7 @@ def getPolyIntersectArea(poly1, poly2):
             p1next = poly1[(index1+1) % len(poly1)]
             p2cur = poly2[index2]
             p2next = poly2[(index2+1) % len(poly2)]
-            testintersect, testt1, testt2 = lineIntersect2(p1cur, p1next, p2cur, p2next)
+            testintersect, testt1, testt2 = lineIntersect(p1cur, p1next, p2cur, p2next)
             if testintersect is not None and testt1 >= 0 and testt1 <= 1 and testt2 >= 0 and testt2 <= 1:
                 intersectpoints[index1][index2] = testintersect
                 t1s[index1][index2] = testt1
@@ -202,6 +224,7 @@ def getPolyIntersectArea(poly1, poly2):
             return []
 
 #Used to merge mesh elements
+#Only compares vertices of neighboring mesh polygons
 def mergePolys(poly1, poly2):
     #No duplicates
     newpoly = []
@@ -231,30 +254,3 @@ def mergePolys(poly1, poly2):
 
     print("Failure to merge")
     return None
-
-#Get area to left of line within polygon
-def getPolyLineArea(poly, l1, l2):
-    assert not (l1[0] == l2[0] and l1[1] == l2[1])
-    intersectRegion = []
-    if l1[0] == l2[0]:
-        for i in range(len(poly)):
-            p1 = poly[i]
-            p2 = poly[(i+1) % len(poly)]
-            if (p1[0] <= l1[0] and l1[1] < l2[1]) or (p1[0] >= l1[0] and l1[1] > l2[1]):
-                intersectRegion.append(p1)
-            if (p1[0] < l1[0] and p2[0] > l1[0]) or (p1[0] > l1[0] and p2[0] < l1[0]):
-                t = (l1[0] - p1[0])/(p2[0]-p1[0])
-                pinter = [p1[0] + (p2[0]-p1[0])*t, p1[1] + (p2[1]-p1[1])*t]
-                intersectRegion.append(pinter)
-    else:
-        l = lambda x : l1[1] + (l2[1]-l1[1])*(x-l1[0])/(l2[0]-l1[0])
-        for i in range(len(poly)):
-            p1 = poly[i]
-            p2 = poly[(i+1) % len(poly)]
-            if (p1[1] >= l(p1[0]) and l1[0] < l2[0]) or (p1[1] <= l(p1[0]) and l1[0] > l2[0]):
-                intersectRegion.append(p1)
-            if (p1[1] > l(p1[0]) and p2[1] < l(p2[0])) or (p1[1] < l(p1[0]) and p2[1] > l(p2[0])):
-                t = (p1[1]-l1[1]-(l2[1]-l1[1])*(p1[0]-l1[0])/(l2[0]-l1[0]))/((l2[1]-l1[1])*(p2[0]-p1[0])/(l2[0]-l1[0]) - (p2[1]-p1[1]))
-                pinter = [p1[0] + (p2[0]-p1[0])*t, p1[1] + (p2[1]-p1[1])*t]
-                intersectRegion.append(pinter)
-    return getArea(intersectRegion)

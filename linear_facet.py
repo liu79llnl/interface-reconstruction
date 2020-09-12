@@ -1,24 +1,30 @@
 import math
-from geoms import getArea, getCentroid, getDistance, getPolyLineArea
+from geoms import getArea, getCentroid, getDistance, lerp, getPolyLineArea
 
 #Newton's method
 #Assumes centroids are different
-#Gets linear facet
-
+#Matches area fractions a1, a2
 def getLinearFacet(poly1, poly2, a1, a2, epsilon):
     #Basic sanity tests:
-    assert a1 >= 0 and a1 <= getArea(poly1) and a2 >= 0 and a2 <= getArea(poly2), "Given areas for linear facet are not valid"
+    assert a1 >= 0 and a1 <= 1 and a2 >= 0 and a2 <= 1, "Given areas for linear facet are not valid"
 
     #Hyperparameters:
-    dtbase = 1e-8
-    centroidscale = 1
+    dtbase = 1e-8 #Timestep used to calculate numerical estimates of derivatives
+    centroidscale = 1 #Scale initial guesses apart from each other
+
+    #Convert from area fractions to areas
+    poly1area = getArea(poly1)
+    poly2area = getArea(poly2)
+
+    a1 *= poly1area
+    a2 *= poly2area
     
     #Initial guess
     centroid1 = getCentroid(poly1)
     centroid2 = getCentroid(poly2)
     #scale centroids away from polygons so algorithm not affected by sharp corners
-    l1 = [centroidscale*centroid1[0]-(centroidscale-1)*centroid2[0], centroidscale*centroid1[1]-(centroidscale-1)*centroid2[1]]
-    l2 = [centroidscale*centroid2[0]-(centroidscale-1)*centroid1[0], centroidscale*centroid2[1]-(centroidscale-1)*centroid1[1]]
+    l1 = lerp(centroid1, centroid2, 1-centroidscale)
+    l2 = lerp(centroid2, centroid1, 1-centroidscale)
     converged = False
     
     while not(converged):
@@ -28,7 +34,7 @@ def getLinearFacet(poly1, poly2, a1, a2, epsilon):
         #Compute areas
         cura1 = getPolyLineArea(poly1, l1, l2)
         cura2 = getPolyLineArea(poly2, l1, l2)
-        if abs(cura1 - a1) < epsilon and abs(cura2 - a2) < epsilon:
+        if abs(cura1 - a1)/poly1area < epsilon and abs(cura2 - a2)/poly2area < epsilon:
             converged = True
         else:
         
@@ -68,7 +74,7 @@ def getLinearFacet(poly1, poly2, a1, a2, epsilon):
                 cura1 = getPolyLineArea(poly1, l1, l2)
                 cura1dir = (cura1 > a1)
                 cura1converged = False
-                while abs(cura1 - a1) > epsilon:
+                while abs(cura1 - a1)/poly1area > epsilon:
                     if cura1 < a1:
                         t1 -= t1gap
                     else:
@@ -90,7 +96,7 @@ def getLinearFacet(poly1, poly2, a1, a2, epsilon):
                 cura2 = getPolyLineArea(poly2, l1, l2)
                 cura2dir = (cura2 > a2)
                 cura2converged = False
-                while abs(cura2 - a2) > epsilon:
+                while abs(cura2 - a2)/poly2area > epsilon:
                     if cura2 < a2:
                         t2 -= t2gap
                     else:
@@ -117,11 +123,22 @@ def getLinearFacet(poly1, poly2, a1, a2, epsilon):
 
 #Alternate linear facet finder, without Newton's method or numerical derivatives
 #Assumes centroids are different
-#Hyperparameter: centroidscale
+#Matches area fraction a1, a2
 def getLinearFacet2(poly1, poly2, a1, a2, epsilon):
+    #Basic sanity tests:
+    assert a1 >= 0 and a1 <= 1 and a2 >= 0 and a2 <= 1, "Given areas for linear facet are not valid"
+
     #Hyperparameters:
     scaleEpsilon = 1 #Amount to decrease epsilons by as iterations continue to try to avoid infinite loops
     centroidscale = 5 #Amount to scale centroids away from each other
+    cyclethreshold = 1e-4 #2-cycles are detected where distance is greater than cyclethreshold
+
+    #Convert from area fractions to areas
+    poly1area = getArea(poly1)
+    poly2area = getArea(poly2)
+
+    a1 *= poly1area
+    a2 *= poly2area
     
     #Find the pair of vertices in poly1, poly2 such that their distance is minimized
     #centroid1 to centroid2 is closest pair, alsomatch1 to alsomatch2 is second closest or tied
@@ -165,9 +182,9 @@ def getLinearFacet2(poly1, poly2, a1, a2, epsilon):
         normal = [(centroid1[1]-centroid2[1])/math.sqrt((centroid1[1]-centroid2[1])**2 + (centroid2[0]-centroid1[0])**2), (centroid2[0]-centroid1[0])/math.sqrt((centroid1[1]-centroid2[1])**2 + (centroid2[0]-centroid1[0])**2)]
     
     #scale centroids away from polygons so algorithm not affected by sharp corners
-    centroid1 = [centroidscale*centroid1[0]-(centroidscale-1)*centroid2[0], centroidscale*centroid1[1]-(centroidscale-1)*centroid2[1]]
-    centroid2 = [centroidscale*centroid2[0]-(centroidscale-1)*centroid1[0], centroidscale*centroid2[1]-(centroidscale-1)*centroid1[1]]
-    
+    centroid1 = lerp(centroid1, centroid2, 1-centroidscale)
+    centroid2 = lerp(centroid2, centroid1, 1-centroidscale)
+
     t1 = 0
     t2 = 0
     converged = False
@@ -185,12 +202,12 @@ def getLinearFacet2(poly1, poly2, a1, a2, epsilon):
         l1 = [centroid1[0]+t1*normal[0], centroid1[1]+t1*normal[1]]
         l2 = [centroid2[0]+t2*normal[0], centroid2[1]+t2*normal[1]]
         
-        if prev2l1 is not None and getDistance(prev2l1, l1) < epsilon and getDistance(prevl1, l1) > 1e-4 and getDistance(prev2l2, l2) < epsilon and getDistance(prevl2, l2) > 1e-4:
-            print("Cycle: {}, {}, {}, {}, centroidscale={}".format(prev2l1, prev2l2, prevl1, prevl2, centroidscale))
+        #Cycle
+        if prev2l1 is not None and getDistance(prev2l1, l1) < epsilon and getDistance(prevl1, l1) > cyclethreshold and getDistance(prev2l2, l2) < epsilon and getDistance(prevl2, l2) > cyclethreshold:
             #Move the centroids further from each other and from the opposite polygon
             centroidscale *= 2
-            centroid1 = [centroidscale*centroid1[0]-(centroidscale-1)*centroid2[0], centroidscale*centroid1[1]-(centroidscale-1)*centroid2[1]]
-            centroid2 = [centroidscale*centroid2[0]-(centroidscale-1)*centroid1[0], centroidscale*centroid2[1]-(centroidscale-1)*centroid1[1]]
+            centroid1 = lerp(centroid1, centroid2, 1-centroidscale)
+            centroid2 = lerp(centroid2, centroid1, 1-centroidscale)
             l1 = centroid1
             l2 = centroid2
         
@@ -202,7 +219,7 @@ def getLinearFacet2(poly1, poly2, a1, a2, epsilon):
         cura1 = getPolyLineArea(poly1, l1, l2)
         cura2 = getPolyLineArea(poly2, l1, l2)
 
-        if abs(cura1 - a1) < epsilon and abs(cura2 - a2) < epsilon:
+        if abs(cura1 - a1)/poly1area < epsilon and abs(cura2 - a2)/poly2area < epsilon:
             converged = True
         else:
             #match a1 by moving l1
@@ -212,7 +229,7 @@ def getLinearFacet2(poly1, poly2, a1, a2, epsilon):
             cura1 = getPolyLineArea(poly1, l1, l2)
             cura1dir = (cura1 > a1)
             cura1converged = False
-            while abs(cura1 - a1) > epsilon*(scaleEpsilon**numcycles):
+            while abs(cura1 - a1)/poly1area > epsilon*(scaleEpsilon**numcycles):
                 if cura1 < a1:
                     t1 -= t1gap
                 else:
@@ -234,7 +251,7 @@ def getLinearFacet2(poly1, poly2, a1, a2, epsilon):
             cura2 = getPolyLineArea(poly2, l1, l2)
             cura2dir = (cura2 > a2)
             cura2converged = False
-            while abs(cura2 - a2) > epsilon*(scaleEpsilon**numcycles):
+            while abs(cura2 - a2)/poly2area > epsilon*(scaleEpsilon**numcycles):
                 if cura2 < a2:
                     t2 -= t2gap
                 else:
