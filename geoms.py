@@ -65,7 +65,7 @@ def getPolyLineIntersects(poly, l1, l2):
             p2 = poly[(i+1) % len(poly)]
             if (p1[0] < l1[0] and p2[0] > l1[0]) or (p1[0] > l1[0] and p2[0] < l1[0]):
                 t = (l1[0] - p1[0])/(p2[0]-p1[0])
-                pinter = [p1[0] + (p2[0]-p1[0])*t, p1[1] + (p2[1]-p1[1])*t]
+                pinter = lerp(p1, p2, t)
                 intersects.append(pinter)
                 distances.append(getDistance(l1, pinter))
     else:
@@ -75,7 +75,7 @@ def getPolyLineIntersects(poly, l1, l2):
             p2 = poly[(i+1) % len(poly)]
             if (p1[1] > l(p1[0]) and p2[1] < l(p2[0])) or (p1[1] < l(p1[0]) and p2[1] > l(p2[0])):
                 t = (p1[1]-l1[1]-(l2[1]-l1[1])*(p1[0]-l1[0])/(l2[0]-l1[0]))/((l2[1]-l1[1])*(p2[0]-p1[0])/(l2[0]-l1[0]) - (p2[1]-p1[1]))
-                pinter = [p1[0] + (p2[0]-p1[0])*t, p1[1] + (p2[1]-p1[1])*t]
+                pinter = lerp(p1, p2, t)
                 intersects.append(pinter)
                 distances.append((l2[0]-l1[0])*(pinter[0]-l1[0]) + (l2[1]-l1[1])*(pinter[1]-l1[1]))
     return [x for _,x in sorted(zip(distances, intersects))]
@@ -92,7 +92,7 @@ def getPolyLineArea(poly, l1, l2):
                 intersectRegion.append(p1)
             if (p1[0] < l1[0] and p2[0] > l1[0]) or (p1[0] > l1[0] and p2[0] < l1[0]):
                 t = (l1[0] - p1[0])/(p2[0]-p1[0])
-                pinter = [p1[0] + (p2[0]-p1[0])*t, p1[1] + (p2[1]-p1[1])*t]
+                pinter = lerp(p1, p2, t)
                 intersectRegion.append(pinter)
     else:
         l = lambda x : l1[1] + (l2[1]-l1[1])*(x-l1[0])/(l2[0]-l1[0])
@@ -103,7 +103,7 @@ def getPolyLineArea(poly, l1, l2):
                 intersectRegion.append(p1)
             if (p1[1] > l(p1[0]) and p2[1] < l(p2[0])) or (p1[1] < l(p1[0]) and p2[1] > l(p2[0])):
                 t = (p1[1]-l1[1]-(l2[1]-l1[1])*(p1[0]-l1[0])/(l2[0]-l1[0]))/((l2[1]-l1[1])*(p2[0]-p1[0])/(l2[0]-l1[0]) - (p2[1]-p1[1]))
-                pinter = [p1[0] + (p2[0]-p1[0])*t, p1[1] + (p2[1]-p1[1])*t]
+                pinter = lerp(p1, p2, t)
                 intersectRegion.append(pinter)
     return getArea(intersectRegion)
 
