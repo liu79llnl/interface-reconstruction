@@ -1,17 +1,7 @@
-import numpy as np
-import math
-import vtk
-import os
-import matplotlib.pyplot as plt
-from matplotlib.patches import Polygon
-from matplotlib.collections import PatchCollection
-
 from geoms import getDistance, getArea, mergePolys, getPolyIntersectArea, getPolyLineArea, getPolyLineIntersects, lineIntersect, getCentroid
 from linear_facet import getLinearFacet
 from circular_facet import getCircleIntersectArea, getCircleCircleIntersects, getArcFacet, getArcFacetNewton, getCircleLineIntersects2, getCenter
 from corner_facet import getPolyCornerArea, getPolyCurvedCornerArea, getCurvedCornerFacet
-from mesh import makeCartesianGrid, makeQuadGrid, makeConcaveGrid, makeFineCartesianGrid
-from vtkplots import plotQuadGrid, plotFacets
 
 #opolys = grid of quads
 #areas = grid of area fractions per quad
