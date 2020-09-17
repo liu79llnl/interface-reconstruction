@@ -207,7 +207,7 @@ def getPolyIntersectArea(poly1, poly2):
                             curi1 = mini
                             onOne = not(onOne)
                                
-                intersections.append(vlist)
+                intersections.append(vlist[:-1])
             else:
                 testedintersects[index1][index2] = True
 

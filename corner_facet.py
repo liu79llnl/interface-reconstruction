@@ -67,7 +67,7 @@ def getPolyCurvedCornerArea(poly, facet1, corner, facet2, radius1, radius2):
         assert abs(radius1) >= getDistance(facet1, corner)/2
     if radius2 is not None:
         assert abs(radius2) >= getDistance(facet2, corner)/2
-    area = getPolyCornerArea(poly, facet1, corner, facet2)*getArea(poly)
+    area = getPolyCornerArea(poly, facet1, corner, facet2)
     if radius1 is not None:
         if radius1 < 0:
             radius1 *= -1
@@ -107,17 +107,17 @@ def getCurvedCornerFacet(polys, areas, facet1, corner, facet2, radius1, radius2,
 
     cornerx = corner[0]
     cornery = corner[1]
-    curareas = list(map(lambda x : getPolyCurvedCornerArea(x, facet1, corner, facet2, radius1, radius2)/getArea(polys[x]), polys)) #area fractions
+    curareas = list(map(lambda x : getPolyCurvedCornerArea(x, facet1, corner, facet2, radius1, radius2)/getArea(x), polys)) #area fractions
     while max(list(map(lambda x : abs(curareas[x] - areas[x]), range(len(polys))))) > epsilon:
         #Compute numerical derivatives
-        curareasdx = list(map(lambda x : (getPolyCurvedCornerArea(x, facet1, [cornerx+dtbase/2, cornery], facet2, radius1, radius2)-getPolyCurvedCornerArea(x, facet1, [cornerx-dtbase/2, cornery], facet2, radius1, radius2))/dtbase, polys))
-        curareasdy = list(map(lambda x : (getPolyCurvedCornerArea(x, facet1, [cornerx, cornery+dtbase/2], facet2, radius1, radius2)-getPolyCurvedCornerArea(x, facet1, [cornerx, cornery-dtbase/2], facet2, radius1, radius2))/dtbase, polys))
+        curareasdx = list(map(lambda x : (getPolyCurvedCornerArea(x, facet1, [cornerx+dtbase/2, cornery], facet2, radius1, radius2)-getPolyCurvedCornerArea(x, facet1, [cornerx-dtbase/2, cornery], facet2, radius1, radius2))/dtbase/getArea(x), polys))
+        curareasdy = list(map(lambda x : (getPolyCurvedCornerArea(x, facet1, [cornerx, cornery+dtbase/2], facet2, radius1, radius2)-getPolyCurvedCornerArea(x, facet1, [cornerx, cornery-dtbase/2], facet2, radius1, radius2))/dtbase/getArea(x), polys))
         #Jacobian: 2 by len(polys)
         jacobian = np.array([list(map(lambda x : curareasdx[x], range(len(polys)))), list(map(lambda x : curareasdy[x], range(len(polys))))])
         cornerchanges = np.matmul(np.matmul(np.linalg.inv(np.matmul(jacobian, np.transpose(jacobian))), jacobian), np.transpose(np.array(list(map(lambda x : areas[x]-curareas[x], range(len(polys)))))))
         cornerx += newtonFactor*cornerchanges[0]
         cornery += newtonFactor*cornerchanges[1]
-        newcurareas = list(map(lambda x : getPolyCurvedCornerArea(x, facet1, [cornerx, cornery], facet2, radius1, radius2)/getArea(polys[x]), polys)) #area fractions
+        newcurareas = list(map(lambda x : getPolyCurvedCornerArea(x, facet1, [cornerx, cornery], facet2, radius1, radius2)/getArea(x), polys)) #area fractions
         if max(list(map(lambda x : abs(curareas[x]-newcurareas[x]), range(len(polys))))) < convthreshold:
             break
         curareas = newcurareas

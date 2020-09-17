@@ -127,16 +127,8 @@ def getArcFacet(poly1, poly2, poly3, a1, a2, a3, epsilon):
     #Rotate so that x-axis is linear facet
     l1, l2 = getLinearFacet(poly1, poly3, a1, a3, epsilon/10)
 
-    #Convert area fractions to areas
-    poly1area = getArea(poly1)
-    poly2area = getArea(poly2)
-    poly3area = getArea(poly3)
-    a1 *= poly1area
-    a2 *= poly2area
-    a3 *= poly3area
-
     #Center to left of line l1 to l2
-    if getPolyLineArea(poly2, l1, l2) > a2:
+    if getPolyLineArea(poly2, l1, l2) > a2*getArea(poly2):
         retcenter, retradius, retintersects = getArcFacet(poly3, poly2, poly1, 1-a3, 1-a2, 1-a1, epsilon)
         if retcenter is not None:
             retintersects.reverse()
@@ -144,6 +136,14 @@ def getArcFacet(poly1, poly2, poly3, a1, a2, a3, epsilon):
             return retcenter, retradius, retintersects #TODO: radius should always be positive, negative radius means facet is concave, area fraction k -> 1-k
         else:
             return None, None, None
+
+    #Convert area fractions to areas
+    poly1area = getArea(poly1)
+    poly2area = getArea(poly2)
+    poly3area = getArea(poly3)
+    a1 *= poly1area
+    a2 *= poly2area
+    a3 *= poly3area
 
     poly1intersects = getPolyLineIntersects(poly1, l1, l2)
     poly2intersects = getPolyLineIntersects(poly2, l1, l2)
@@ -346,6 +346,16 @@ def getArcFacet(poly1, poly2, poly3, a1, a2, a3, epsilon):
 #Newton's method, requires precise initial guess
 #Matches area fractions a1, a2, a3
 def getArcFacetNewton(poly1, poly2, poly3, a1, a2, a3, epsilon, gcenterx, gcentery, gradius):
+    #Center to left of line l1 to l2
+    if gradius < 0:
+        retcenter, retradius, retintersects = getArcFacetNewton(poly3, poly2, poly1, 1-a3, 1-a2, 1-a1, epsilon, gcenterx, gcentery, -gradius)
+        if retcenter is not None:
+            retintersects.reverse()
+            retradius *= -1
+            return retcenter, retradius, retintersects #TODO: radius should always be positive, negative radius means facet is concave, area fraction k -> 1-k
+        else:
+            return None, None, None
+
     #Hyperparameters:
     scaleEpsilon = 1 #Adjust threshold by this amount per failed timestep
     dtbase = 1e-8 #Timestep used to calculate numerical estimates of derivatives
