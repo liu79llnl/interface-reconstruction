@@ -269,7 +269,7 @@ def advection(gridSize, timesteps, plotVtk, plotMat, makeGapless):
 
             prederrors = list(map(lambda x : max(1e-15, x), prederrors))
             prederrors = list(map(lambda x : math.log10(x), prederrors))
-            print("Average area fraction error: {}".format(sum(prederrors)/len(prederrors)))
+            print("Average log area fraction error: {}".format(sum(prederrors)/len(prederrors)))
 
             totaladvectedarea = 0
             for x in range(len(opolys)):
@@ -293,5 +293,5 @@ threshold = 1e-10*resolution
 vsize = 0.0905
 gridSize = 70
 timesteps = 50
-#advection(gridSize, timesteps, plotVtk=True, plotMat=True, makeGapless=True)
-advection(gridSize, timesteps, plotVtk=False, plotMat=False, makeGapless=True)
+advection(gridSize, timesteps, plotVtk=True, plotMat=True, makeGapless=True)
+#advection(gridSize, timesteps, plotVtk=False, plotMat=False, makeGapless=True)
