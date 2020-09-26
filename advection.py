@@ -17,10 +17,10 @@ from interface_reconstruction import merge, makeFacets, advectFacets
 def advection(gridSize, timesteps, plotVtk, plotMat, makeGapless):
     
     #starting mesh
-    opoints = makeCartesianGrid(gridSize)
+    #opoints = makeCartesianGrid(gridSize)
     #opoints = makeQuadGrid(gridSize, wiggle)
     #opoints = makeConcaveGrid(gridSize, wiggle)
-    #opoints = makeFineCartesianGrid(gridSize, resolution)
+    opoints = makeFineCartesianGrid(gridSize, resolution)
     
     #mesh velocity per timestep
     velocity = [vsize, vsize]
@@ -39,21 +39,22 @@ def advection(gridSize, timesteps, plotVtk, plotMat, makeGapless):
     for x in range(len(opoints)-1):
         for y in range(len(opoints)-1):
             opoly = [opoints[x][y], opoints[x+1][y], opoints[x+1][y+1], opoints[x][y+1]]
-            """
-            #Initial area setting
-            #cross
+            
+            #Initial area setting: "x" and "o" example -> #TODO: to run advection scheme on different shapes, adjust initial area setting
+            #Cross
             xpoints = [[4, 0], [10, 6], [16, 0], [20, 4], [14, 10], [20, 16], [16, 20], [10, 14], [4, 20], [0, 16], [6, 10], [0, 4]]
             xpoints = list(map(lambda x : [x[0]+3.005, x[1]+3.025], xpoints))
             xpolyintersects = getPolyIntersectArea(xpoints, opoly)
             for xpolyintersect in xpolyintersects:
                 areas[x][y] += abs(getArea(xpolyintersect))
-            #cross
+            #Cross
             xpoints = [[6, 0], [14, 0], [14, 6], [20, 6], [20, 14], [14, 14], [14, 20], [6, 20], [6, 14], [0, 14], [0, 6], [6, 6]]
             xpoints = list(map(lambda x : [x[0]+3.005, x[1]+25.025], xpoints))
             xpolyintersects = getPolyIntersectArea(xpoints, opoly)
             for xpolyintersect in xpolyintersects:
                 areas[x][y] += abs(getArea(xpolyintersect))
-            """
+            
+            #Union of two circles
             truecircleintersect1, truecircleintersect2 = getCircleCircleIntersects([38.005, 33.005], [38.005, 13.005], 12, 12)
             if getDistance(getCentroid(opoly), truecircleintersect1) <= 2:
                 areas[x][y] += getPolyCurvedCornerArea(opoly, [26.005, 33.005], truecircleintersect1, [26.005, 13.005], 12, 12)
@@ -67,22 +68,18 @@ def advection(gridSize, timesteps, plotVtk, plotMat, makeGapless):
                 center = [38.005, 13.005]
                 area, intersect = getCircleIntersectArea(center, 12, opoly)
                 areas[x][y] += area
-            """
-            #ring
-            radiussmall = 10
-            center = [38.005, 13.005]
-            area, intersect = getCircleIntersectArea(center, radiussmall, opoly)
-            areas[x][y] += area
+            
+            #Ring
             radiussmall = 7
             center = [38.005, 13.005]
             area, intersect = getCircleIntersectArea(center, radiussmall, opoly)
             areas[x][y] -= area
-            #ring
+            #Ring
             radiussmall = 7
             center = [38.005, 33.005]
             area, intersect = getCircleIntersectArea(center, radiussmall, opoly)
-            areas[x][y] += area
-            """
+            areas[x][y] -= area
+
             areas[x][y] /= getArea(opoly)
             if areas[x][y] > 1:
                 areas[x][y] = 1
@@ -134,7 +131,7 @@ def advection(gridSize, timesteps, plotVtk, plotMat, makeGapless):
             os.mkdir('advection_vtk')
         except:
             print("Saving vtk files in ./advection_vtk/.")
-        plotQuadGrid(opoints, 'advection_vtk/quads')
+        plotQuadGrid(opoints, 'quads')
     
     #main advection loop
     for timestep in range(timesteps):
@@ -146,10 +143,10 @@ def advection(gridSize, timesteps, plotVtk, plotMat, makeGapless):
 
         #Plot facets in vtk
         if plotVtk and (timestep % 10 == 0 or timestep == timesteps-1):
-            plotFacets(facetsunique, 'advection_vtk/timestep_{}'.format(timestep))
+            plotFacets(facetsunique, 'timestep_{}'.format(timestep))
         
         print("Computing new areas")
-        nareas = advectFacets(opolys, areas, predfacets, velocity, 1, threshold)
+        nareas = advectFacets(opolys, areas, predfacets, velocity, resolution, threshold)
         areas = nareas
         
         if plotMat:
@@ -184,7 +181,7 @@ def advection(gridSize, timesteps, plotVtk, plotMat, makeGapless):
             plt.clf()
 
             
-            #True areas
+            #True areas -> #TODO: should correspond to initial area fraction fitting
             trueareas = [[0] * len(opolys) for _ in range(len(opolys))]
             truepatchareas = []
             truepatcherrors = []
@@ -192,20 +189,21 @@ def advection(gridSize, timesteps, plotVtk, plotMat, makeGapless):
             for x in range(len(opolys)):
                 for y in range(len(opolys)):
                     opoly = [opoints[x][y], opoints[x+1][y], opoints[x+1][y+1], opoints[x][y+1]]
-                    """
-                    #material 1 cross
+                    
+                    #Cross
                     xpoints = [[4, 0], [10, 6], [16, 0], [20, 4], [14, 10], [20, 16], [16, 20], [10, 14], [4, 20], [0, 16], [6, 10], [0, 4]]
                     xpoints = list(map(lambda x : [x[0]+3.005+velocity[0]*(timestep+1), x[1]+3.025+velocity[1]*(timestep+1)], xpoints))
                     xpolyintersects = getPolyIntersectArea(xpoints, opoly)
                     for xpolyintersect in xpolyintersects:
                         trueareas[x][y] += abs(getArea(xpolyintersect))
-                    #material 2 cross
+                    #Cross
                     xpoints = [[6, 0], [14, 0], [14, 6], [20, 6], [20, 14], [14, 14], [14, 20], [6, 20], [6, 14], [0, 14], [0, 6], [6, 6]]
                     xpoints = list(map(lambda x : [x[0]+3.005+velocity[0]*(timestep+1), x[1]+25.025+velocity[1]*(timestep+1)], xpoints))
                     xpolyintersects = getPolyIntersectArea(xpoints, opoly)
                     for xpolyintersect in xpolyintersects:
                         trueareas[x][y] += abs(getArea(xpolyintersect))
-                    """
+                    
+                    #Union of two circles
                     truecircleintersect1, truecircleintersect2 = getCircleCircleIntersects([38.005+velocity[0]*(timestep+1), 33.005+velocity[1]*(timestep+1)], [38.005+velocity[0]*(timestep+1), 13.005+velocity[1]*(timestep+1)], 12, 12)
                     if getDistance([x+0.5, y+0.5], truecircleintersect1) <= 2:
                         trueareas[x][y] += getPolyCurvedCornerArea(opoly, [26.005+velocity[0]*(timestep+1), 33.005+velocity[1]*(timestep+1)], truecircleintersect1, [26.005+velocity[0]*(timestep+1), 13.005+velocity[1]*(timestep+1)], 12, 12)
@@ -219,18 +217,18 @@ def advection(gridSize, timesteps, plotVtk, plotMat, makeGapless):
                         center = [38.005+velocity[0]*(timestep+1), 13.005+velocity[1]*(timestep+1)]
                         area, intersect = getCircleIntersectArea(center, 12, opoly)
                         trueareas[x][y] += area
-                    """
-                    #ring
+                    
+                    #Ring
                     radiussmall = 7
                     center = [38.005+velocity[0]*(timestep+1), 13.005+velocity[1]*(timestep+1)]
                     area, intersect = getCircleIntersectArea(center, radiussmall, opoly)
                     trueareas[x][y] -= area
-                    #ring
+                    #Ring
                     radiussmall = 7
                     center = [38.005+velocity[0]*(timestep+1), 33.005+velocity[1]*(timestep+1)]
                     area, intersect = getCircleIntersectArea(center, radiussmall, opoly)
-                    trueareas[x][y] += area
-                    """
+                    trueareas[x][y] -= area
+                    
                     trueareas[x][y] /= getArea(opolys[x][y])
                     if abs(1-trueareas[x][y]) < threshold:
                         trueareas[x][y] = 1
@@ -271,7 +269,8 @@ def advection(gridSize, timesteps, plotVtk, plotMat, makeGapless):
 
             prederrors = list(map(lambda x : max(1e-15, x), prederrors))
             prederrors = list(map(lambda x : math.log10(x), prederrors))
-            print(sum(prederrors)/len(prederrors))
+            print("Average area fraction error: {}".format(sum(prederrors)/len(prederrors)))
+
             totaladvectedarea = 0
             for x in range(len(opolys)):
                 for y in range(len(opolys)):
@@ -289,10 +288,10 @@ def advection(gridSize, timesteps, plotVtk, plotMat, makeGapless):
 
 np.random.seed(17)
 wiggle = 0.5
-threshold = 1e-10
+resolution = 1
+threshold = 1e-10*resolution
 vsize = 0.0905
 gridSize = 70
-resolution = 1
 timesteps = 50
-#advection(gridSize, timesteps, plotVtk=False, plotMat=False, makeGapless=True)
-advection(gridSize, timesteps, plotVtk=False, plotMat=True, makeGapless=False)
+#advection(gridSize, timesteps, plotVtk=True, plotMat=True, makeGapless=True)
+advection(gridSize, timesteps, plotVtk=False, plotMat=False, makeGapless=True)

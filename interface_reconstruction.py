@@ -1,4 +1,4 @@
-from geoms import getDistance, getArea, mergePolys, getPolyIntersectArea, getPolyLineArea, getPolyLineIntersects, lineIntersect, getCentroid
+from geoms import getDistance, lerp, getArea, mergePolys, getPolyIntersectArea, getPolyLineArea, getPolyLineIntersects, lineIntersect, getCentroid
 from linear_facet import getLinearFacet
 from circular_facet import getCircleIntersectArea, getCircleCircleIntersects, getArcFacet, getArcFacetNewton, getCircleLineIntersects2, getCenter
 from corner_facet import getPolyCornerArea, getPolyCurvedCornerArea, getCurvedCornerFacet
@@ -323,6 +323,9 @@ def makeFacets(mergedpolyindices, mergedpolyinfos, mergedcoords, mergedareafract
                         nextpolygonarea = mergedareafractions[nexti]
                         try:
                             arccenter, arcradius, arcintersects = getArcFacet(prevpolygon, curpolygon, nextpolygon, prevpolygonarea, curpolygonarea, nextpolygonarea, threshold)
+                            #If failed: skip
+                            if arccenter is None or arcradius is None or arcintersects is None:
+                                continue
                             if len(arcintersects) == 0:
                                 print("getArcFacet({}, {}, {}, {}, {}, {}, {})".format(prevpolygon, curpolygon, nextpolygon, prevpolygonarea, curpolygonarea, nextpolygonarea, threshold))
                             else:
@@ -345,12 +348,12 @@ def makeFacets(mergedpolyindices, mergedpolyinfos, mergedcoords, mergedareafract
                         nextpolygon = mergedcoords[nexti]
                         nextpolygonarea = mergedareafractions[nexti]
                         #Try previous to see if circle facet
-                        if facetfitted[(i-1) % len(facetfitted)] is not None and facetfitted[(i-1) % len(facetfitted)][0] == 'arc':
+                        if facetfitted[(i-1) % len(facetfitted)] is not None and facetfitted[(i-1) % len(facetfitted)][0] == 'arc' and facetfitted[(i-1) % len(facetfitted)][1] is not None:
                             gcenterx = facetfitted[(i-1) % len(facetfitted)][1][0]
                             gcentery = facetfitted[(i-1) % len(facetfitted)][1][1]
                             gradius = facetfitted[(i-1) % len(facetfitted)][2]
                         #Try next to see if circle facet
-                        elif facetfitted[(i+1) % len(facetfitted)] is not None and facetfitted[(i+1) % len(facetfitted)][0] == 'arc':
+                        elif facetfitted[(i+1) % len(facetfitted)] is not None and facetfitted[(i+1) % len(facetfitted)][0] == 'arc' and facetfitted[(i+1) % len(facetfitted)][1] is not None:
                             gcenterx = facetfitted[(i+1) % len(facetfitted)][1][0]
                             gcentery = facetfitted[(i+1) % len(facetfitted)][1][1]
                             gradius = facetfitted[(i+1) % len(facetfitted)][2]
@@ -359,7 +362,8 @@ def makeFacets(mergedpolyindices, mergedpolyinfos, mergedcoords, mergedareafract
                             facetfitted[i] = ['arc', arccenter, arcradius, arcintersects]
                         except:
                             #Circle facet algorithm with Newton's method failed or no nearby circular facets
-                            print("getArcFacetNewton({}, {}, {}, {}, {}, {}, {}, {}, {}, {})".format(prevpolygon, curpolygon, nextpolygon, prevpolygonarea, curpolygonarea, nextpolygonarea, threshold, gcenterx, gcentery, gradius))
+                            pass
+                            #print("getArcFacetNewton({}, {}, {}, {}, {}, {}, {}, {}, {}, {})".format(prevpolygon, curpolygon, nextpolygon, prevpolygonarea, curpolygonarea, nextpolygonarea, threshold, gcenterx, gcentery, gradius))
                             
                 #Try to fit a curved corner
                 for i in range(len(facetfitted)):
@@ -428,6 +432,8 @@ def makeFacets(mergedpolyindices, mergedpolyinfos, mergedcoords, mergedareafract
                             nextradius = nextcornerfacetside[2]
                             curvedcorner2 = nextcornerfacetside[3][0]
                             curvedcornerpoint = getCircleCircleIntersects(prevcenter, nextcenter, prevradius, nextradius)
+                            if len(curvedcornerpoint) == 0:
+                                continue
                             if getDistance(curpolygon[0], curvedcornerpoint[0]) >= getDistance(curpolygon[0], curvedcornerpoint[1]):
                                 curvedcornerpoint = curvedcornerpoint[1]
                             else:
@@ -465,7 +471,9 @@ def makeFacets(mergedpolyindices, mergedpolyinfos, mergedcoords, mergedareafract
                     for i in range(len(facetfitted)):
                         if facetfitted[i] is not None and facetfitted[i][0] is not 'corner' and facetfitted[i][0] is not 'curvedcorner' and facetfitted[(i+1) % len(facetfitted)] is not None and facetfitted[(i+1) % len(facetfitted)][0] is not 'corner' and facetfitted[(i+1) % len(facetfitted)][0] is not 'curvedcorner':
                             #average rightmost intersect of current facet and leftmost intersect of previous facet
-                            newIntersect = [(facetfitted[i][-1][-1][0]+facetfitted[(i+1) % len(facetfitted)][-1][0][0])/2, (facetfitted[i][-1][-1][1]+facetfitted[(i+1) % len(facetfitted)][-1][0][1])/2]
+                            facetpoint1 = facetfitted[i][-1][-1]
+                            facetpoint2 = facetfitted[(i+1) % len(facetfitted)][-1][0]
+                            newIntersect = lerp(facetpoint1, facetpoint2, 0.5)
                             facetfitted[i][-1][-1] = newIntersect
                             facetfitted[(i+1)% len(facetfitted)][-1][0] = newIntersect
                     for i in range(len(facetfitted)):
@@ -479,7 +487,7 @@ def makeFacets(mergedpolyindices, mergedpolyinfos, mergedcoords, mergedareafract
                                 facetfitted[i][1] = getCenter(intersectright, intersectleft, -facetfitted[i][2])
                             #compute new center
                             #TODO: instead of preserving curvature, try preserving volume fraction
-
+                
                 #Store facet info for each grid square (from merged squares)
                 for i in range(len(facetfitted)):
                     for facetsquares in mergedpolyinfos[path[i+1]][0]:

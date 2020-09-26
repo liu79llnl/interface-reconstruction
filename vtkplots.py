@@ -21,67 +21,57 @@ def plotPolyGrid(polys, savename):
             g.write("{}_polygrid_{}_{}.vtp\n".format(savename, j, i))
     g.close()
 
-#Draw circular arcs
-#centers = list of centers, intersects = list of pairs of intersects (x, y)
-def plotArcFacets(centers, intersects, savename):
-    assert len(centers) == len(intersects)
-    g = open("{}_all.visit".format(savename), "w")
-    g.write("!NBLOCKS {}\n".format(len(centers)))
-    for i in range(len(centers)):
-        arc = vtk.vtkArcSource()
-        arc.SetPoint1(intersects[i][0][0], intersects[i][0][1], 0)
-        arc.SetPoint2(intersects[i][1][0], intersects[i][1][1], 0)
-        arc.SetCenter(centers[i][0], centers[i][1], 0)
-        arc.SetResolution(8)
-        writer = vtk.vtkXMLPolyDataWriter()
-        writer.SetFileName("{}_arc_{}.vtp".format(savename, i))
-        writer.SetInputConnection(arc.GetOutputPort())
-        writer.Write()
-        g.write("{}_arc_{}.vtp\n".format(savename, i))
-    g.close()
-
-#Draw linear facets
-#intersects = list of pairs of intersects (x, y)
-def plotLinearFacets(intersects, savename):
-    g = open("{}_all.visit".format(savename), "w")
-    g.write("!NBLOCKS {}\n".format(sum(list(map(lambda x : len(x)-1, intersects)))))
-    for facetnum, facet in enumerate(intersects):
-        for i in range(len(facet)-1):
-            p1 = facet[i]
-            p2 = facet[i+1]
-            line = vtk.vtkLineSource()
-            line.SetPoint1(p1[0], p1[1], 0)
-            line.SetPoint2(p2[0], p2[1], 0)
-            writer = vtk.vtkXMLPolyDataWriter()
-            writer.SetFileName("{}_line_{}_{}.vtp".format(savename, facetnum, i))
-            writer.SetInputConnection(line.GetOutputPort())
-            writer.Write()
-            g.write("{}_line_{}_{}.vtp\n".format(savename, facetnum, i))
-    g.close()
-
 #Draw perturbed quad grid
 #points = 2d-array, where points[x][y] = the point corresponding to the perturbation of (x, y) in Cartesian grid
 def plotQuadGrid(points, savename):
-    pointindices = [[-1] * len(points) for _ in range(len(points))]
-    indexcounter = 0
-    vtkpoints = vtk.vtkPoints()
-    ugrid = vtk.vtkUnstructuredGrid()
-    ugrid.Allocate(len(points)**2)
+    try:
+        os.mkdir("advection_vtk/{}".format(savename))
+    except:
+        pass
 
+    g = open("advection_vtk/{}_grid.visit".format(savename), "w")
+    facetnum = 0
     for x in range(len(points)-1):
-        for y in range(len(points)-1):
-            neighbors = [[0, 0], [1, 0], [1, 1], [0, 1]]
-            for neighbor in neighbors:
-                if pointindices[x+neighbor[0]][y+neighbor[1]] == -1:
-                    pointindices[x+neighbor[0]][y+neighbor[1]] = indexcounter
-                    vtkpoints.InsertPoint(indexcounter, [points[x+neighbor[0]][y+neighbor[1]][0], points[x+neighbor[0]][y+neighbor[1]][1], 0])
-                    indexcounter += 1
-            ugrid.InsertNextCell(vtk.VTK_QUAD, 4, [pointindices[x][y], pointindices[x+1][y], pointindices[x+1][y+1], pointindices[x][y+1]])
+        for y in range(len(points[0])-1):
+            line = vtk.vtkLineSource()
+            line.SetPoint1(points[x][y][0], points[x][y][1], 0)
+            line.SetPoint2(points[x][y+1][0], points[x][y+1][1], 0)
+            writer = vtk.vtkXMLPolyDataWriter()
+            writer.SetFileName("advection_vtk/{}/facet_{}.vtp".format(savename, facetnum))
+            writer.SetInputConnection(line.GetOutputPort())
+            writer.Write()
+            facetnum += 1
+            line = vtk.vtkLineSource()
+            line.SetPoint1(points[x][y][0], points[x][y][1], 0)
+            line.SetPoint2(points[x+1][y][0], points[x+1][y][1], 0)
+            writer = vtk.vtkXMLPolyDataWriter()
+            writer.SetFileName("advection_vtk/{}/facet_{}.vtp".format(savename, facetnum))
+            writer.SetInputConnection(line.GetOutputPort())
+            writer.Write()
+            facetnum += 1
+    for x in range(len(points)-1):
+        line = vtk.vtkLineSource()
+        line.SetPoint1(points[x][len(points[0])-1][0], points[x][len(points[0])-1][1], 0)
+        line.SetPoint2(points[x+1][len(points[0])-1][0], points[x+1][len(points[0])-1][1], 0)
+        writer = vtk.vtkXMLPolyDataWriter()
+        writer.SetFileName("advection_vtk/{}/facet_{}.vtp".format(savename, facetnum))
+        writer.SetInputConnection(line.GetOutputPort())
+        writer.Write()
+        facetnum += 1
+    for y in range(len(points[0])-1):
+        line = vtk.vtkLineSource()
+        line.SetPoint1(points[len(points)-1][y][0], points[len(points)-1][y][1], 0)
+        line.SetPoint2(points[len(points)-1][y+1][0], points[len(points)-1][y+1][1], 0)
+        writer = vtk.vtkXMLPolyDataWriter()
+        writer.SetFileName("advection_vtk/{}/facet_{}.vtp".format(savename, facetnum))
+        writer.SetInputConnection(line.GetOutputPort())
+        writer.Write()
+        facetnum += 1
 
-    writer = vtk.vtkXMLUnstructuredGridWriter()
-    writer.SetFileName("{}_grid.vtp".format(savename))
-    writer.SetInputData(ugrid)
-    writer.Write()
+    g.write("!NBLOCKS {}\n".format(facetnum))
+    for i in range(facetnum):
+        g.write("{}/facet_{}.vtp\n".format(savename, i))
+    g.close()
 
 #Draw facets, input in format of makeFacets
 #Linear facet: ['linear', intersects]
@@ -89,35 +79,75 @@ def plotQuadGrid(points, savename):
 #Arc facet: ['arc', arccenter, arcradius, arcintersects]
 def plotFacets(facets, savename):
     try:
-        os.mkdir(savename)
+        os.mkdir("advection_vtk/{}".format(savename))
     except:
         pass
 
-    g = open("{}_all.visit".format(savename), "w")
+    g = open("advection_vtk/{}_all.visit".format(savename), "w")
+
     facetnum = 0
     for facet in facets:
-        if facet[0] == 'linear' or facet[0] == 'corner':
-            for i in range(len(facet)-1):
-                p1 = facet[1][i]
-                p2 = facet[1][i+1]
-                line = vtk.vtkLineSource()
-                line.SetPoint1(p1[0], p1[1], 0)
-                line.SetPoint2(p2[0], p2[1], 0)
+        if facet is not None:
+            if facet[0] == 'linear' or facet[0] == 'corner':
+                for i in range(len(facet[1])-1):
+                    p1 = facet[1][i]
+                    p2 = facet[1][i+1]
+                    line = vtk.vtkLineSource()
+                    line.SetPoint1(p1[0], p1[1], 0)
+                    line.SetPoint2(p2[0], p2[1], 0)
+                    writer = vtk.vtkXMLPolyDataWriter()
+                    writer.SetFileName("advection_vtk/{}/facet_{}.vtp".format(savename, facetnum))
+                    writer.SetInputConnection(line.GetOutputPort())
+                    writer.Write()
+                    facetnum += 1
+            elif facet[0] == 'arc':
+                arc = vtk.vtkArcSource()
+                arc.SetPoint1(facet[3][0][0], facet[3][0][1], 0)
+                arc.SetPoint2(facet[3][-1][0], facet[3][-1][1], 0)
+                arc.SetCenter(facet[1][0], facet[1][1], 0)
+                arc.SetResolution(8)
                 writer = vtk.vtkXMLPolyDataWriter()
-                writer.SetFileName("{}/facet_{}.vtp".format(savename, facetnum))
-                writer.SetInputConnection(line.GetOutputPort())
+                writer.SetFileName("advection_vtk/{}/facet_{}.vtp".format(savename, facetnum))
+                writer.SetInputConnection(arc.GetOutputPort())
                 writer.Write()
-        elif facet[0] == 'arc':
-            arc = vtk.vtkArcSource()
-            arc.SetPoint1(facet[3][0][0], facet[3][0][1], 0)
-            arc.SetPoint2(facet[3][-1][0], facet[3][-1][1], 0)
-            arc.SetCenter(facet[1][0], facet[1][1], 0)
-            arc.SetResolution(8)
-            writer = vtk.vtkXMLPolyDataWriter()
-            writer.SetFileName("{}/facet_{}.vtp".format(savename, facetnum))
-            writer.SetInputConnection(arc.GetOutputPort())
-            writer.Write()
-        facetnum += 1
+                facetnum += 1
+            elif facet[0] ==  'curvedcorner':
+                if facet[1] is not None:
+                    arc = vtk.vtkArcSource()
+                    arc.SetPoint1(facet[-1][0][0], facet[-1][0][1], 0)
+                    arc.SetPoint2(facet[-1][1][0], facet[-1][1][1], 0)
+                    arc.SetCenter(facet[1][0], facet[1][1], 0)
+                    arc.SetResolution(8)
+                    writer = vtk.vtkXMLPolyDataWriter()
+                    writer.SetFileName("advection_vtk/{}/facet_{}.vtp".format(savename, facetnum))
+                    writer.SetInputConnection(arc.GetOutputPort())
+                else:
+                    line = vtk.vtkLineSource()
+                    line.SetPoint1(facet[-1][0][0], facet[-1][0][1], 0)
+                    line.SetPoint2(facet[-1][1][0], facet[-1][1][1], 0)
+                    writer = vtk.vtkXMLPolyDataWriter()
+                    writer.SetFileName("advection_vtk/{}/facet_{}.vtp".format(savename, facetnum))
+                    writer.SetInputConnection(line.GetOutputPort())
+                writer.Write()
+                facetnum += 1
+                if facet[2] is not None:
+                    arc = vtk.vtkArcSource()
+                    arc.SetPoint1(facet[-1][1][0], facet[-1][1][1], 0)
+                    arc.SetPoint2(facet[-1][2][0], facet[-1][2][1], 0)
+                    arc.SetCenter(facet[2][0], facet[2][1], 0)
+                    arc.SetResolution(8)
+                    writer = vtk.vtkXMLPolyDataWriter()
+                    writer.SetFileName("advection_vtk/{}/facet_{}.vtp".format(savename, facetnum))
+                    writer.SetInputConnection(arc.GetOutputPort())
+                else:
+                    line = vtk.vtkLineSource()
+                    line.SetPoint1(facet[-1][1][0], facet[-1][1][1], 0)
+                    line.SetPoint2(facet[-1][2][0], facet[-1][2][1], 0)
+                    writer = vtk.vtkXMLPolyDataWriter()
+                    writer.SetFileName("advection_vtk/{}/facet_{}.vtp".format(savename, facetnum))
+                    writer.SetInputConnection(line.GetOutputPort())
+                writer.Write()
+                facetnum += 1
 
     g.write("!NBLOCKS {}\n".format(facetnum))
     for i in range(facetnum):

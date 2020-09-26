@@ -122,7 +122,7 @@ def getArcFacet(poly1, poly2, poly3, a1, a2, a3, epsilon):
     dtbase = 1e-8 #Timestep used to calculate numerical estimates of derivatives
     fixLinearFacetOrientation = epsilon #Threshold used to determine orientation of wrong linear facets
     fixLinearFacet = 1.1 #Amount to adjust linear facet guess by to fix
-    maxTimestep = 500 #Amount of timesteps allowed before we declare failure
+    maxTimestep = 75 #Amount of timesteps allowed before we declare failure
     
     #Rotate so that x-axis is linear facet
     l1, l2 = getLinearFacet(poly1, poly3, a1, a3, epsilon/10)
@@ -207,6 +207,7 @@ def getArcFacet(poly1, poly2, poly3, a1, a2, a3, epsilon):
     #towards r3down = cura3 decreases
     r3down = min(intersects3)
     r3up = max(intersects3)
+    
 
     #Idea: degrees of freedom are a, r1, r3
     #r1 lies between r1down and r1up, r3 lies between r3down and r3up
@@ -235,7 +236,9 @@ def getArcFacet(poly1, poly2, poly3, a1, a2, a3, epsilon):
         doConverge = False
         #higher a = higher cura2
         largeenough = False
-        while abs(cura2 - a2)/poly2area > epsilon*(scaleEpsilon**numcycles):
+        innercycles = 0
+        while abs(cura2 - a2)/poly2area > epsilon*(scaleEpsilon**numcycles) and innercycles < maxTimestep:
+            innercycles += 1
             if not(largeenough):
                 largeenough2 = True
                 for rpoly2vertex in rpoly2:
@@ -261,6 +264,10 @@ def getArcFacet(poly1, poly2, poly3, a1, a2, a3, epsilon):
                 else:
                     radius -= rgap
                     rgap /= 2
+            #Max range of radius hit, return error
+            if radius**2 - ((r3-r1)**2) / 4 < 0:
+                print("Error in getArcFacet({}, {}, {}, {}, {}, {}, {})".format(poly1, poly2, poly3, a1, a2, a3, epsilon))
+                return None, None, None
             center = [(r1+r3)/2, math.sqrt(radius**2 - ((r3-r1)**2) / 4)]
             cura2, _ = getCircleIntersectArea(center, radius, rpoly2)
 
@@ -268,12 +275,20 @@ def getArcFacet(poly1, poly2, poly3, a1, a2, a3, epsilon):
         dt = dtbase
         center = [(r1+r3)/2, math.sqrt(radius**2 - ((r3-r1)**2) / 4)]
         cura1, _ = getCircleIntersectArea(center, radius, rpoly1)
-        
-        while abs(cura1 - a1)/poly1area > epsilon*(scaleEpsilon**numcycles):
+
+        innercycles = 0
+        while abs(cura1 - a1)/poly1area > epsilon*(scaleEpsilon**numcycles) and innercycles < maxTimestep:
+            innercycles += 1
+            #Max range of a1 hit, break and continue
+            if radius**2 - ((r3-r1-dt)**2) / 4 < 0:
+                break
             cura1plusdt, _ = getCircleIntersectArea([(r1+dt+r3)/2, math.sqrt(radius**2 - ((r3-r1-dt)**2) / 4)], radius, rpoly1)
             
             da1dr1 = (cura1plusdt-cura1)/dt
-            
+            #Numerical derivative is 0, return error
+            if da1dr1 == 0:
+                print("Error in getArcFacet({}, {}, {}, {}, {}, {}, {})".format(poly1, poly2, poly3, a1, a2, a3, epsilon))
+                return None, None, None
             r1 = max(r3 - 2*radius, r1 + (a1-cura1)/da1dr1)
             center = [(r1+r3)/2, math.sqrt(radius**2 - ((r3-r1)**2) / 4)]
             cura1, _ = getCircleIntersectArea(center, radius, rpoly1)
@@ -286,7 +301,9 @@ def getArcFacet(poly1, poly2, poly3, a1, a2, a3, epsilon):
         doConverge = False
         #higher a = higher cura2
         largeenough = False
-        while abs(cura2 - a2)/poly2area > epsilon*(scaleEpsilon**numcycles):
+        innercycles = 0
+        while abs(cura2 - a2)/poly2area > epsilon*(scaleEpsilon**numcycles) and innercycles < maxTimestep:
+            innercycles += 1
             if not(largeenough):
                 largeenough2 = True
                 for rpoly2vertex in rpoly2:
@@ -312,19 +329,31 @@ def getArcFacet(poly1, poly2, poly3, a1, a2, a3, epsilon):
                 else:
                     radius -= rgap
                     rgap /= 2
+            #Max range of radius hit, return error
+            if radius**2 - ((r3-r1)**2) / 4 < 0:
+                print("Error in getArcFacet({}, {}, {}, {}, {}, {}, {})".format(poly1, poly2, poly3, a1, a2, a3, epsilon))
+                return None, None, None
             center = [(r1+r3)/2, math.sqrt(radius**2 - ((r3-r1)**2) / 4)]
             cura2, _ = getCircleIntersectArea(center, radius, rpoly2)
-            
+
         #adjust r3 to match a3
         dt = dtbase
         center = [(r1+r3)/2, math.sqrt(radius**2 - ((r3-r1)**2) / 4)]
         cura3, _ = getCircleIntersectArea(center, radius, rpoly3)
         
-        while abs(cura3 - a3)/poly3area > epsilon*(scaleEpsilon**numcycles):
+        innercycles = 0
+        while abs(cura3 - a3)/poly3area > epsilon*(scaleEpsilon**numcycles) and innercycles < maxTimestep:
+            innercycles += 1
+            #Max range of a3 hit, break and continue
+            if radius**2 - ((r3-dt-r1)**2) / 4 < 0:
+                break
             cura3minusdt, _ = getCircleIntersectArea([(r1+r3-dt)/2, math.sqrt(radius**2 - ((r3-dt-r1)**2) / 4)], radius, rpoly3)
             
             da3dr3 = (cura3-cura3minusdt)/dt
-            
+            #Numerical derivative is 0, return error
+            if da3dr3 == 0:
+                print("Error in getArcFacet({}, {}, {}, {}, {}, {}, {})".format(poly1, poly2, poly3, a1, a2, a3, epsilon))
+                return None, None, None
             r3 = min(r1 + 2*radius, r3 + (a3-cura3)/da3dr3)
             center = [(r1+r3)/2, math.sqrt(radius**2 - ((r3-r1)**2) / 4)]
             cura3, _ = getCircleIntersectArea(center, radius, rpoly3)
